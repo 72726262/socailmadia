@@ -1,13 +1,23 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:soso/Cubit/cubitcreateuser.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-class CreateUserFirebase extends Cubit<counterstate> {
-  String? error22;
-  CreateUserFirebase(super.initialState);
+abstract class CreateUserState {}
 
+class CreateUserInitial extends CreateUserState {}
+
+class CreateUserLoading extends CreateUserState {}
+
+class CreateUserSuccess extends CreateUserState {}
+
+class CreateUserFailure extends CreateUserState {
+  final String message;
+  CreateUserFailure(this.message);
+}
+
+class CreateUserCubit extends Cubit<CreateUserState> {
+  CreateUserCubit() : super(CreateUserInitial());
   Future<void> signUp({
     required String email,
     required String password,
@@ -16,7 +26,7 @@ class CreateUserFirebase extends Cubit<counterstate> {
     required String datetime,
   }) async {
     try {
-      emit(counterstateLoding());
+      emit(CreateUserLoading());
       final supabase = Supabase.instance.client;
 
       //بنتاكد هوا مسجل بيه قبل كده ولا لا
@@ -27,8 +37,11 @@ class CreateUserFirebase extends Cubit<counterstate> {
           .maybeSingle();
 
       if (existingUser != null) {
-        error22 = "⚠️ هذا البريد مسجّل مسبقًا، يمكنك تسجيل الدخول بدلاً من ذلك";
-        emit(counterstateFaliuer());
+        emit(
+          CreateUserFailure(
+            "⚠️ هذا البريد مسجّل مسبقًا، يمكنك تسجيل الدخول بدلاً من ذلك",
+          ),
+        );
         return;
       }
 
@@ -49,31 +62,29 @@ class CreateUserFirebase extends Cubit<counterstate> {
         });
       }
 
-      emit(counterstateSuccuss());
+      emit(CreateUserSuccess());
     } on AuthException catch (e) {
-      emit(counterstateFaliuer());
+      String errorMessage;
       switch (e.code) {
         case 'validation_failed':
-          error22 = "❌ البريد الإلكتروني غير صالح";
+          errorMessage = "❌ البريد الإلكتروني غير صالح";
           break;
         case 'weak_password':
-          error22 = "❌ كلمة المرور قصيرة جداً";
+          errorMessage = "❌ كلمة المرور قصيرة جداً";
           break;
         case 'over_email_send_rate_limit':
-          error22 = "⚠️ هذا البريد مسجل بالفعل، جرّب تسجيل دخول";
+          errorMessage = "⚠️ هذا البريد مسجل بالفعل، جرّب تسجيل دخول";
           break;
         default:
-          error22 = "⚠️ خطأ في المصادقة: ${e.message}";
+          errorMessage = "⚠️ خطأ في المصادقة: ${e.message}";
       }
+      emit(CreateUserFailure(errorMessage));
     } on SocketException {
-      emit(counterstateFaliuer());
-      error22 = "📡 تأكد من اتصال الإنترنت";
+      emit(CreateUserFailure("📡 تأكد من اتصال الإنترنت"));
     } on TimeoutException {
-      emit(counterstateFaliuer());
-      error22 = "⌛ الاتصال استغرق وقت طويل";
+      emit(CreateUserFailure("⌛ الاتصال استغرق وقت طويل"));
     } catch (e) {
-      emit(counterstateFaliuer());
-      error22 = "⚠️ خطأ غير متوقع: $e";
+      emit(CreateUserFailure("⚠️ خطأ غير متوقع: $e"));
     }
   }
 }

@@ -1,9 +1,12 @@
-abstract class counterstate {}
+abstract class CreateUserState {}
 
-class counterstateintial extends counterstate {}
+class CreateUserInitial extends CreateUserState {}
 
-class counterstateLoding extends counterstate {}
+class CreateUserLoading extends CreateUserState {}
 
-class counterstateSuccuss extends counterstate {}
+class CreateUserSuccess extends CreateUserState {}
 
-class counterstateFaliuer extends counterstate {}
+class CreateUserFailure extends CreateUserState {
+  final String message;
+  CreateUserFailure(this.message);
+}

@@ -134,7 +134,7 @@ class _AddPostScreenState extends State<AddPostScreen> {
                     child: Row(
                       children: [
                         CircleAvatar(
-                          radius: 24,
+                          radius: 27,
                           backgroundImage: NetworkImage(user.image),
                         ),
                         const SizedBox(width: 12),
@@ -144,7 +144,7 @@ class _AddPostScreenState extends State<AddPostScreen> {
                             Text(
                               user.name,
                               style: const TextStyle(
-                                fontSize: 20,
+                                fontSize: 26,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
@@ -206,16 +206,38 @@ class _AddPostScreenState extends State<AddPostScreen> {
                 children: [
                   ElevatedButton.icon(
                     onPressed: () => _pickImage(ImageSource.camera),
-                    icon: const Icon(Icons.camera_alt, color: Colors.white),
-                    label: Text(isArabic ? "كاميرا" : "Camera"),
+                    icon: const Icon(
+                      Icons.camera_alt,
+                      color: Colors.white,
+                      size: 22,
+                    ),
+                    label: Text(
+                      isArabic ? "كاميرا" : "Camera",
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF0066FF),
                     ),
                   ),
                   ElevatedButton.icon(
                     onPressed: () => _pickImage(ImageSource.gallery),
-                    icon: const Icon(Icons.photo_library, color: Colors.white),
-                    label: Text(isArabic ? "معرض الصور" : "Gallery"),
+                    icon: const Icon(
+                      Icons.photo_library,
+                      color: Colors.white,
+                      size: 22,
+                    ),
+                    label: Text(
+                      isArabic ? "معرض الصور" : "Gallery",
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF0066FF),
                     ),
@@ -235,7 +257,7 @@ class _AddPostScreenState extends State<AddPostScreen> {
                     child: Text(
                       isArabic ? "نشر" : "Post",
                       style: const TextStyle(
-                        fontSize: 22,
+                        fontSize: 26,
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
                       ),

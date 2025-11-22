@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:soso/model/UserModel.dart';
 import 'package:soso/model/PostModel.dart';
 import 'package:soso/services/notification_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -70,6 +71,14 @@ class PostService {
 
         // إشعار للمالك إن حد عجب بمنشوره
         if (userId != postOwnerId) {
+          // ⭐ جديد: جلب بيانات المستخدم الذي قام بالإعجاب
+          final likerData = await supabase
+              .from('users')
+              .select()
+              .eq('uid', userId)
+              .single();
+          final liker = UserModel.fromMap(likerData);
+
           await _notificationService.addNotification(
             type: 'like',
             senderId: userId,
@@ -161,5 +170,25 @@ class PostService {
         .stream(primaryKey: ["id"])
         .order("created_at", ascending: false)
         .map((rows) => rows.map<Post>((data) => Post.fromMap(data)).toList());
+  }
+
+  /// يجلب بيانات منشور واحد بناءً على الـ ID الخاص به.
+  ///
+  /// يتضمن جلب بيانات المستخدم (صاحب المنشور) المرتبطة به.
+  Future<Map<String, dynamic>?> getPostById(int postId) async {
+    try {
+      final response = await supabase
+          .from('posts')
+          .select(
+            '*, profiles (fullname, avatar_url)',
+          ) // جلب بيانات المنشور وبيانات المستخدم
+          .eq('id', postId)
+          .single(); // .single() لجلب نتيجة واحدة فقط
+
+      return response;
+    } catch (e) {
+      print('Error fetching post by ID: $e');
+      return null;
+    }
   }
 }

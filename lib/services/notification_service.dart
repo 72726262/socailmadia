@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../model/NotificationModel.dart';
 
@@ -49,14 +51,31 @@ class NotificationService {
 
   // ⭐ جلب عدد الإشعارات غير المقروءة
   Stream<int> getUnreadCountStream(String userId) {
-    return supabase
-        .from('notifications')
-        .stream(primaryKey: ['id'])
-        .eq('receiver_id', userId)
-        .map((data) => data.length) // ⬅️ نرجع كل الإشعارات مؤقتاً
-        .handleError((error) {
-          print("Error in unread count stream: $error");
-          return 0;
+    // ✅ أحدث وأسرع طريقة: استخدام ميزة العد المباشر (count) من Supabase Realtime
+    // هذا يتطلب تحديث حزمة supabase_flutter إلى أحدث إصدار
+    final channel = supabase.channel('public:notifications_count');
+    return channel
+        .on(
+          RealtimeListenTypes.postgresChanges,
+          ChannelFilter(
+            event: 'COUNT',
+            schema: 'public',
+            table: 'notifications',
+            filter: 'receiver_id=eq.$userId&is_read=eq.false',
+          ),
+          (payload, [ref]) {
+            // 'payload' يحتوي مباشرة على العدد الجديد
+            final newCount = payload['count'] as int;
+            return newCount;
+          },
+        )
+        .map((payload) {
+          // هذه الخطوة ضرورية لتحويل الـ Stream إلى Stream<int>
+          // قد تحتاج إلى تعديل بسيط هنا حسب نوع البيانات العائدة بالضبط
+          if (payload is Map && payload.containsKey('count')) {
+            return payload['count'] as int;
+          }
+          return 0; // قيمة افتراضية في حالة عدم وجود العدد
         });
   }
 

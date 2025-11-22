@@ -174,7 +174,7 @@ class _UserStoryViewerState extends State<UserStoryViewer>
                 return AnimatedOpacity(
                   opacity: index == _currentIndex ? 1 : 0.0,
                   duration: Duration(milliseconds: 300),
-                  child: Image.network(story.imageUrl, fit: BoxFit.cover),
+                  child: Image.network(story.imageUrl, fit: BoxFit.fitWidth),
                 );
               },
             ),
@@ -232,11 +232,14 @@ class _UserStoryViewerState extends State<UserStoryViewer>
                     children: [
                       Text(
                         currentStory.userName,
-                        style: TextStyle(color: Colors.white, fontSize: 18),
+                        style: TextStyle(color: Colors.white, fontSize: 24),
                       ),
                       Text(
                         formatTime(currentStory.createdAt, isRTL),
-                        style: TextStyle(color: Colors.white70, fontSize: 14),
+                        style: TextStyle(
+                          color: const Color.fromARGB(255, 255, 255, 255),
+                          fontSize: 18,
+                        ),
                       ),
                     ],
                   ),

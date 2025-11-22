@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:soso/Cubit/cubitsignInuser.dart';
 import 'package:soso/main.dart';
 import 'package:soso/services/signInUserfirebase.dart';
 import 'package:soso/views/homepage/HomeScreen%20.dart';
@@ -54,34 +53,27 @@ class _LoginPageState extends State<LoginPage>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: BlocConsumer<Signinuserfirebase, counterstate2>(
+      body: BlocConsumer<SignInCubit, SignInState>(
         listener: (context, state) {
-          if (state is counterstateLoding2) {
+          if (state is SignInLoading) {
             _isloding = true;
-          } else if (state is counterstateSuccuss2) {
+            setState(() {});
+          } else if (state is SignInSuccess) {
             _isloding = false;
+            setState(() {});
             Navigator.pushNamed(context, HomeScreen.routeName);
-          } else if (state is counterstateFaliuer2) {
+          } else if (state is SignInFailure) {
             _isloding = false;
+            setState(() {});
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text(
-                  context.read<Signinuserfirebase>().error22.toString(),
-                  style: TextStyle(fontSize: 28),
-                ),
-              ),
-            );
-          } else {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  context.read<Signinuserfirebase>().error22.toString(),
-                ),
+                content: Text(state.message),
+                backgroundColor: Colors.red,
               ),
             );
           }
         },
-        builder: (context, asyncSnapshot) {
+        builder: (context, state) {
           return Stack(
             children: [
               FadeTransition(
@@ -312,7 +304,7 @@ class _LoginPageState extends State<LoginPage>
                               if (!_formKey.currentState!.validate()) return;
 
                               if (isEmailSelected) {
-                                context.read<Signinuserfirebase>().signIn(
+                                context.read<SignInCubit>().signIn(
                                   email: email!,
                                   password: password!,
                                 );

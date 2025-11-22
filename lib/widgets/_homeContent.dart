@@ -30,8 +30,23 @@ class _HomeContentState extends State<HomeContent> {
   // ⭐ جديد: حفظ البيانات القديمة
   List<Post> _cachedPosts = [];
   List<Story> _cachedStories = [];
-  final NotificationService _notificationService = NotificationService();
+  // final NotificationService _notificationService = NotificationService(); // تم نقله
   final String _currentUserId = Supabase.instance.client.auth.currentUser!.id;
+
+  // ⭐ جديد: تعريف الخدمات و الـ Streams هنا
+  final PostService _postService = PostService();
+  final StoryService _storyService = StoryService();
+  late final Stream<List<Post>> _postsStream;
+  late final Stream<List<Story>> _storiesStream;
+
+  @override
+  void initState() {
+    super.initState();
+    // ⭐ جديد: جلب الـ Streams مرة واحدة فقط عند بداية الشاشة
+    _postsStream = _postService.getPostsStream();
+    _storiesStream = _storyService.getStoriesStream();
+  }
+
   @override
   Widget build(BuildContext context) {
     final lang = Localizations.localeOf(context).languageCode;
@@ -90,7 +105,7 @@ class _HomeContentState extends State<HomeContent> {
                 // أيقونة الإشعارات مع عداد
                 // الكود الجديد للإشعارات
                 Stack(
-                  clipBehavior: Clip.none,
+                  clipBehavior: Clip.none, // ⭐ تم نقل خدمة الإشعارات
                   children: [
                     IconButton(
                       onPressed: () {
@@ -98,7 +113,7 @@ class _HomeContentState extends State<HomeContent> {
                       },
                       icon: const Icon(Icons.notifications, size: 30),
                     ),
-                    StreamBuilder<int>(
+                    /* StreamBuilder<int>(
                       stream: _notificationService.getUnreadCountStream(
                         _currentUserId,
                       ),
@@ -135,7 +150,7 @@ class _HomeContentState extends State<HomeContent> {
                         }
                         return const SizedBox();
                       },
-                    ),
+                    ), */
                   ],
                 ),
               ],
@@ -151,7 +166,7 @@ class _HomeContentState extends State<HomeContent> {
                   SizedBox(
                     height: 90,
                     child: StreamBuilder<List<Story>>(
-                      stream: StoryService().getStoriesStream(),
+                      stream: _storiesStream, // ⭐ استخدام الـ Stream المحفوظ
                       builder: (context, snapshot) {
                         final isLoading =
                             snapshot.connectionState == ConnectionState.waiting;
@@ -328,7 +343,7 @@ class _HomeContentState extends State<HomeContent> {
 
                   // ---------------- Posts From Supabase ----------------
                   StreamBuilder<List<Post>>(
-                    stream: PostService().getPostsStream(),
+                    stream: _postsStream, // ⭐ استخدام الـ Stream المحفوظ
                     builder: (context, snapshot) {
                       final isLoading =
                           snapshot.connectionState == ConnectionState.waiting;
@@ -612,7 +627,7 @@ class _HomeContentState extends State<HomeContent> {
               ),
               child: Image.network(
                 post.imageUrl!,
-                fit: BoxFit.cover,
+                fit: BoxFit.fitHeight,
                 width: double.infinity,
                 height: 200,
                 loadingBuilder: (context, child, loadingProgress) {
@@ -646,89 +661,65 @@ class _HomeContentState extends State<HomeContent> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                // ❤️ Likes - محدث تلقائياً
-                StreamBuilder<List<Post>>(
-                  stream: PostService().getPostsStream(),
-                  builder: (context, snapshot) {
-                    Post currentPost = post;
-
-                    if (snapshot.hasData) {
-                      final updatedPosts = snapshot.data!;
-                      final updatedPost = updatedPosts.firstWhere(
-                        (p) => p.id == post.id,
-                        orElse: () => post,
-                      );
-                      currentPost = updatedPost;
-                    }
-
-                    return Row(
-                      children: [
-                        GestureDetector(
-                          onTap: () async {
-                            final postService = PostService();
-                            await postService.toggleLike(
-                              post.id,
-                              currentUserId,
-                            );
-                          },
-                          child: Icon(
-                            currentPost.likedBy.contains(currentUserId)
-                                ? Icons.favorite
-                                : Icons.favorite_border,
-                            color: currentPost.likedBy.contains(currentUserId)
-                                ? Colors.red
-                                : Colors.grey[700],
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        Text("${currentPost.likesCount}"),
-                      ],
-                    );
+                // ❤️ Likes - الطريقة المحسّنة
+                GestureDetector(
+                  onTap: () async {
+                    // لا داعي لإنشاء PostService جديد هنا
+                    await _postService.toggleLike(post.id, currentUserId);
+                    isLiked = !isLiked;
                   },
-                ),
-
-                // 💬 Comments - محدث تلقائياً
-                StreamBuilder<List<Post>>(
-                  stream: PostService().getPostsStream(),
-                  builder: (context, snapshot) {
-                    int commentsCount = post.commentsCount;
-
-                    if (snapshot.hasData) {
-                      final updatedPosts = snapshot.data!;
-                      final updatedPost = updatedPosts.firstWhere(
-                        (p) => p.id == post.id,
-                        orElse: () => post,
-                      );
-                      commentsCount = updatedPost.commentsCount;
-                    }
-
-                    return GestureDetector(
-                      onTap: () {
-                        Navigator.pushNamed(
-                          context,
-                          CommentsScreen.routeName,
-                          arguments: {
-                            "id": post.id,
-                            "user_id": post.userId,
-                            "contenttext": post.content,
-                            "image_url": post.imageUrl,
-                            "created_at": post.createdAt.toIso8601String(),
-                            "fullname": username,
-                            "userimage": userimage,
-                          },
-                        ).then((_) {
-                          setState(() {});
-                        });
-                      },
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(15),
+                    child: Container(
+                      width: 60,
+                      color: isLiked
+                          ? const Color.fromARGB(255, 236, 158, 152)
+                          : Colors.white,
                       child: Row(
                         children: [
-                          const Icon(Icons.comment, size: 22),
-                          const SizedBox(width: 6),
-                          Text("$commentsCount"),
+                          SizedBox(width: 5),
+                          Icon(
+                            isLiked ? Icons.favorite : Icons.favorite_border,
+                            color: isLiked ? Colors.red : Colors.grey[700],
+                          ),
+
+                          SizedBox(width: 10),
+                          Text("${post.likesCount}"),
                         ],
+                      ),
+                    ),
+                  ),
+                ),
+
+                // 💬 Comments - الطريقة المحسّنة
+                GestureDetector(
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => CommentsScreen(
+                          post: {
+                            "id": post.id,
+                            "user_id": post.userId,
+                            "content": post.content,
+                            "image_url": post.imageUrl,
+                            "created_at": post.createdAt.toIso8601String(),
+                            "fullname":
+                                post.userName, // ⭐ تصحيح: اسم صاحب البوست
+                            "userimage":
+                                post.imageuser, // ⭐ تصحيح: صورة صاحب البوست
+                          },
+                        ),
                       ),
                     );
                   },
+                  child: Row(
+                    children: [
+                      const Icon(Icons.comment, size: 22),
+                      const SizedBox(width: 6),
+                      Text("${post.commentsCount}"),
+                    ],
+                  ),
                 ),
               ],
             ),

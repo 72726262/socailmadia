@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:skeletonizer/skeletonizer.dart';
 import 'package:soso/main.dart';
 import 'package:soso/model/PostModel.dart';
-import 'package:soso/model/selectUsermodeale.dart';
+import 'package:soso/model/UserModel.dart';
+import 'package:soso/services/profile_service.dart';
 import 'package:soso/services/PostService.dart';
-import 'package:soso/services/selecteusers.dart';
 import 'package:soso/views/homepage/CommentsScreen.dart';
 import 'package:soso/widgets/EditProfileScreen.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -19,12 +19,9 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   bool get isArabic => appLocale.value.languageCode == 'ar';
 
-  // ⭐ بيانات المستخدم الحقيقية
-  SelectUsermodale? _currentUser;
-  List<Post> _userPosts = [];
+  final _profileService = ProfileService();
+  ProfileData? _profileData;
   bool _isLoading = true;
-  int _totalLikes = 0;
-  int _totalComments = 0;
 
   @override
   void initState() {
@@ -34,40 +31,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   // ⭐ تحميل بيانات المستخدم والبوستات
   Future<void> _loadUserData() async {
+    setState(() => _isLoading = true);
     try {
-      final currentUserId = Supabase.instance.client.auth.currentUser!.id;
-
-      // جلب بيانات المستخدم
-      final userResponse = await Supabase.instance.client
-          .from('users')
-          .select()
-          .eq('uid', currentUserId)
-          .single();
-
+      final data = await _profileService.getProfileScreenData();
       setState(() {
-        _currentUser = SelectUsermodale.fromMap(userResponse);
-      });
-
-      // جلب بوستات المستخدم
-      final postsService = PostService();
-      final allPosts = await postsService.fetchPosts();
-      final userPosts = allPosts
-          .where((post) => post.userId == currentUserId)
-          .toList();
-
-      // حساب الإحصائيات
-      int totalLikes = 0;
-      int totalComments = 0;
-
-      for (var post in userPosts) {
-        totalLikes += post.likesCount;
-        totalComments += post.commentsCount;
-      }
-
-      setState(() {
-        _userPosts = userPosts;
-        _totalLikes = totalLikes;
-        _totalComments = totalComments;
+        _profileData = data;
         _isLoading = false;
       });
     } catch (e) {
@@ -84,7 +52,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       textDirection: isArabic ? TextDirection.rtl : TextDirection.ltr,
       child: Scaffold(
         backgroundColor: const Color(0xFFF2F6FF),
-        body: _isLoading
+        body: _isLoading || _profileData == null
             ? _buildProfileSkeleton()
             : ListView(
                 padding: EdgeInsets.only(
@@ -211,9 +179,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
               child: CircleAvatar(
                 radius: 55,
-                backgroundImage: NetworkImage(
-                  _currentUser?.image ?? "assets/avatar.png",
-                ),
+                backgroundImage: _profileData!.user.imageUrl != null
+                    ? NetworkImage(_profileData!.user.imageUrl!)
+                    : const AssetImage("assets/avatar.png") as ImageProvider,
                 backgroundColor: Colors.grey[200],
               ),
             ),
@@ -221,9 +189,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
             // اسم المستخدم
             Text(
-              _currentUser?.name ?? "User",
+              _profileData!.user.fullname,
               style: const TextStyle(
-                fontSize: 26,
+                fontSize: 30,
                 fontWeight: FontWeight.bold,
                 color: Colors.white,
                 shadows: [
@@ -239,20 +207,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
             // البريد الإلكتروني
             Text(
-              _currentUser?.email ?? "",
+              _profileData!.user.email,
               style: TextStyle(
-                fontSize: 14,
+                fontSize: 20,
                 color: Colors.white.withOpacity(0.9),
               ),
             ),
             const SizedBox(height: 4),
 
             // النوع وتاريخ الميلاد
-            if (_currentUser?.type != null && _currentUser!.type.isNotEmpty)
+            if (_profileData!.user.gender.isNotEmpty)
               Text(
-                "${_currentUser?.type ?? ""} • ${_formatDate(_currentUser?.datetime ?? "")}",
+                "${_profileData!.user.gender} • ${_formatDate(_profileData!.user.createdAt.toIso8601String())}",
                 style: TextStyle(
-                  fontSize: 12,
+                  fontSize: 20,
                   color: Colors.white.withOpacity(0.8),
                   fontStyle: FontStyle.italic,
                 ),
@@ -329,17 +297,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
         children: [
           _buildStatItem(
             icon: Icons.post_add_rounded,
-            value: _userPosts.length.toString(),
+            value: _profileData!.posts.length.toString(),
             label: isArabic ? "المنشورات" : "Posts",
           ),
           _buildStatItem(
             icon: Icons.favorite_rounded,
-            value: _totalLikes.toString(),
+            value: _profileData!.totalLikes.toString(),
             label: isArabic ? "الإعجابات" : "Likes",
           ),
           _buildStatItem(
             icon: Icons.comment_rounded,
-            value: _totalComments.toString(),
+            value: _profileData!.totalComments.toString(),
             label: isArabic ? "التعليقات" : "Comments",
           ),
         ],
@@ -380,7 +348,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   // ⭐ قسم البوستات
   Widget _buildPostsSection() {
-    if (_userPosts.isEmpty) {
+    final userPosts = _profileData!.posts;
+    if (userPosts.isEmpty) {
       return Container(
         padding: const EdgeInsets.all(40),
         decoration: BoxDecoration(
@@ -425,8 +394,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
           child: Text(
             isArabic
-                ? "منشوراتي (${_userPosts.length})"
-                : "My Posts (${_userPosts.length})",
+                ? "منشوراتي (${userPosts.length})"
+                : "My Posts (${userPosts.length})",
             style: const TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
@@ -435,7 +404,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
         ),
         Column(
-          children: _userPosts.map((post) {
+          children: userPosts.map((post) {
             return Padding(
               padding: const EdgeInsets.only(bottom: 16),
               child: _postCard(post),
@@ -611,8 +580,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             "contenttext": post.content,
                             "image_url": post.imageUrl,
                             "created_at": post.createdAt.toIso8601String(),
-                            "fullname": _currentUser?.name,
-                            "userimage": _currentUser?.image,
+                            "fullname": _profileData?.user.fullname,
+                            "userimage": _profileData?.user.imageUrl,
                           },
                         ).then((_) {
                           setState(() {});

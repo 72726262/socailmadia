@@ -1,6 +1,7 @@
 // -------------------- HomeScreen بعد إضافة Bottom Nav --------------------
 
 import 'package:flutter/material.dart';
+import 'package:soso/controllers/notification_controller.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:soso/main.dart';
@@ -25,6 +26,15 @@ class _HomeScreenState extends State<HomeScreen>
   late AnimationController _animController;
   late Animation<double> _fadeAnimation;
 
+  // ⭐ جديد: قائمة الصفحات التي سيتم التنقل بينها
+  late final List<Widget> _pages = [
+    HomeContent(),
+    SearchScreen(),
+    AddPostScreen(),
+    ChatListScreen(),
+    ProfileScreen(),
+  ];
+
   int _selectedIndex = 0;
 
   bool get isArabic => appLocale.value.languageCode == 'ar';
@@ -41,6 +51,11 @@ class _HomeScreenState extends State<HomeScreen>
       curve: Curves.easeInOut,
     );
     _animController.forward();
+
+    // ⭐ جديد: تشغيل نظام الإشعارات عند بدء تشغيل الشاشة الرئيسية
+    NotificationController().initialize();
+
+    // ⭐ جديد: تهيئة قائمة الصفحات مرة واحدة فقط
   }
 
   @override
@@ -60,15 +75,6 @@ class _HomeScreenState extends State<HomeScreen>
     setState(() {});
   }
 
-  // ✅ الصفحات اللي هتتغير حسب الـ bottom navigation
-  List<Widget> get pages => [
-    HomeContent(),
-    SearchScreen(),
-    AddPostScreen(),
-    ChatListScreen(),
-    ProfileScreen(),
-  ];
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -80,7 +86,10 @@ class _HomeScreenState extends State<HomeScreen>
         children: [
           FadeTransition(
             opacity: _fadeAnimation,
-            child: SafeArea(child: pages[_selectedIndex]),
+            // ⭐ استخدام IndexedStack للحفاظ على حالة الصفحات
+            child: SafeArea(
+              child: IndexedStack(index: _selectedIndex, children: _pages),
+            ),
           ),
 
           // ✅ Bottom Navigation ثابت

@@ -1,11 +1,11 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:skeletonizer/skeletonizer.dart';
 import 'package:soso/main.dart';
 import 'package:soso/model/PostModel.dart';
-import 'package:soso/model/selectUsermodeale.dart';
+import 'package:soso/model/UserModel.dart'; // ⭐ تغيير الموديل
+import 'package:soso/services/chat_service.dart';
 import 'package:soso/services/PostService.dart';
-import 'package:soso/services/selecteusers.dart';
+import 'package:soso/widgets/ChatScreen.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class SearchScreen extends StatefulWidget {
@@ -20,14 +20,13 @@ class _SearchScreenState extends State<SearchScreen>
   final TextEditingController _searchController = TextEditingController();
   bool get isArabic => appLocale.value.languageCode == "ar";
 
-  // ⭐ أنواع البحث - نغير late initialization
-  TabController? _tabController; // ⬅️ نجعلها nullable
+  late final TabController _tabController;
   int _selectedTabIndex = 0;
 
   // ⭐ بيانات البحث
-  List<SelectUsermodale> _filteredUsers = [];
+  List<UserModel> _filteredUsers = [];
   List<Post> _filteredPosts = [];
-  List<SelectUsermodale> _allUsers = [];
+  List<UserModel> _allUsers = [];
   List<Post> _allPosts = [];
 
   bool _isLoading = true;
@@ -36,40 +35,26 @@ class _SearchScreenState extends State<SearchScreen>
   @override
   void initState() {
     super.initState();
-    // ⭐ نؤخر إنشاء TabController لنتأكد من أن الـ widget مبنية
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _initializeTabController();
-    });
+    _tabController = TabController(length: 2, vsync: this);
+    _tabController.addListener(_handleTabSelection);
     _searchController.addListener(_performSearch);
     _loadInitialData();
   }
 
-  // ⭐ دالة جديدة لتهيئة TabController
-  void _initializeTabController() {
-    _tabController = TabController(length: 2, vsync: this);
-    _tabController!.addListener(_handleTabSelection);
-    setState(() {}); // نحدث الواجهة
-  }
-
   void _handleTabSelection() {
-    if (_tabController != null) {
-      setState(() {
-        _selectedTabIndex = _tabController!.index;
-      });
-    }
+    setState(() {
+      _selectedTabIndex = _tabController.index;
+    });
   }
 
   void _loadInitialData() async {
     try {
+      final chatService = ChatService();
       // جلب جميع المستخدمين
-      final usersResponse = await Supabase.instance.client
-          .from('users')
-          .select()
-          .neq('uid', Supabase.instance.client.auth.currentUser!.id);
-
-      _allUsers = usersResponse
-          .map((user) => SelectUsermodale.fromMap(user))
-          .toList();
+      final usersData = await chatService.getAllUsers();
+      _allUsers = usersData.map((userMap) {
+        return UserModel.fromMap(userMap);
+      }).toList();
 
       // جلب جميع البوستات
       final postsService = PostService();
@@ -78,7 +63,7 @@ class _SearchScreenState extends State<SearchScreen>
       setState(() {
         _isLoading = false;
         _filteredUsers = _allUsers;
-        _filteredPosts = _allPosts;
+        _filteredPosts = []; // ⭐ لا تعرض أي منشورات في البداية
       });
     } catch (e) {
       print("Error loading initial data: $e");
@@ -99,15 +84,15 @@ class _SearchScreenState extends State<SearchScreen>
       // عرض كل البيانات عند عدم البحث
       setState(() {
         _filteredUsers = _allUsers;
-        _filteredPosts = _allPosts;
+        _filteredPosts = []; // ⭐ لا تعرض أي منشورات عند مسح البحث
       });
       return;
     }
 
     // البحث في المستخدمين
     final filteredUsers = _allUsers.where((user) {
-      return user.name.toLowerCase().contains(query) ||
-          user.email.toLowerCase().contains(query);
+      return user.fullname.toLowerCase().contains(query) ||
+          (user.email).toLowerCase().contains(query);
     }).toList();
 
     // البحث في البوستات
@@ -124,7 +109,7 @@ class _SearchScreenState extends State<SearchScreen>
 
   @override
   void dispose() {
-    _tabController?.dispose(); // ⬅️ نستخدم ? علشان nullable
+    _tabController.dispose();
     _searchController.dispose();
     super.dispose();
   }
@@ -132,15 +117,6 @@ class _SearchScreenState extends State<SearchScreen>
   @override
   Widget build(BuildContext context) {
     // ⭐ نتحقق إذا الـ TabController جاهز
-    if (_tabController == null) {
-      return Scaffold(
-        backgroundColor: const Color(0xFFF8FAFF),
-        body: Center(
-          child: CircularProgressIndicator(color: Color(0xFF0066FF)),
-        ),
-      );
-    }
-
     return Directionality(
       textDirection: isArabic ? TextDirection.rtl : TextDirection.ltr,
       child: Scaffold(
@@ -272,7 +248,7 @@ class _SearchScreenState extends State<SearchScreen>
               // ----------------------------------
               Expanded(
                 child: TabBarView(
-                  controller: _tabController!,
+                  controller: _tabController,
                   children: [
                     // تبويب الأشخاص
                     _buildUsersTab(),
@@ -289,7 +265,6 @@ class _SearchScreenState extends State<SearchScreen>
     );
   }
 
-  // باقي الدوال تبقى كما هي بدون تغيير...
   Widget _buildUsersTab() {
     if (_isLoading) {
       return _buildUsersSkeleton();
@@ -325,17 +300,23 @@ class _SearchScreenState extends State<SearchScreen>
       return _buildPostsSkeleton();
     }
 
+    // ⭐ جديد: عرض رسالة توجيهية إذا لم يكن المستخدم يبحث
+    if (!_isSearching) {
+      return _buildNoResults(
+        icon: Icons.search_off_rounded,
+        message: isArabic
+            ? "ابدأ البحث عن المنشورات"
+            : "Start searching for posts",
+        subMessage: isArabic
+            ? "اكتب في الشريط أعلاه للعثور على منشورات"
+            : "Type in the bar above to find posts",
+      );
+    }
+
     if (_isSearching && _filteredPosts.isEmpty) {
       return _buildNoResults(
         icon: Icons.article_outlined,
         message: isArabic ? "لا يوجد منشورات بهذا المحتوى" : "No posts found",
-      );
-    }
-
-    if (!_isSearching && _filteredPosts.isEmpty) {
-      return _buildNoResults(
-        icon: Icons.article_outlined,
-        message: isArabic ? "لا يوجد منشورات" : "No posts available",
       );
     }
 
@@ -350,7 +331,7 @@ class _SearchScreenState extends State<SearchScreen>
     );
   }
 
-  Widget _buildUserTile(SelectUsermodale user) {
+  Widget _buildUserTile(UserModel user) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -368,7 +349,9 @@ class _SearchScreenState extends State<SearchScreen>
         children: [
           CircleAvatar(
             radius: 28,
-            backgroundImage: NetworkImage(user.image),
+            backgroundImage: user.imageUrl != null
+                ? NetworkImage(user.imageUrl!)
+                : null,
             backgroundColor: Colors.grey[200],
           ),
           const SizedBox(width: 16),
@@ -377,7 +360,7 @@ class _SearchScreenState extends State<SearchScreen>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  user.name,
+                  user.fullname,
                   style: const TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
@@ -395,28 +378,31 @@ class _SearchScreenState extends State<SearchScreen>
           ),
           GestureDetector(
             onTap: () {
-              _followUser(user);
+              _navigateToChat(user);
             },
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
               decoration: BoxDecoration(
-                color: const Color(0xFF0066FF),
+                color: const Color(0xFF0066FF).withOpacity(0.1),
                 borderRadius: BorderRadius.circular(15),
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0xFF0066FF).withOpacity(0.2),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.chat_bubble_outline_rounded,
+                    color: Color(0xFF0066FF),
+                    size: 20,
+                  ),
+                  SizedBox(width: 8),
+                  Text(
+                    isArabic ? "مراسلة" : "Message",
+                    style: const TextStyle(
+                      color: Color(0xFF0066FF),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ],
-              ),
-              child: Text(
-                isArabic ? "متابعة" : "Follow",
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                ),
               ),
             ),
           ),
@@ -672,7 +658,11 @@ class _SearchScreenState extends State<SearchScreen>
     );
   }
 
-  Widget _buildNoResults({required IconData icon, required String message}) {
+  Widget _buildNoResults({
+    required IconData icon,
+    required String message,
+    String? subMessage,
+  }) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -689,23 +679,59 @@ class _SearchScreenState extends State<SearchScreen>
           ),
           const SizedBox(height: 8),
           Text(
-            isArabic ? "جرب كلمات بحث مختلفة" : "Try different search terms",
+            subMessage ??
+                (isArabic
+                    ? "جرب كلمات بحث مختلفة"
+                    : "Try different search terms"),
             style: TextStyle(fontSize: 14, color: Colors.grey[500]),
+            textAlign: TextAlign.center,
           ),
         ],
       ),
     );
   }
 
-  void _followUser(SelectUsermodale user) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          isArabic ? "تمت متابعة ${user.name}" : "Followed ${user.name}",
-        ),
-        backgroundColor: Colors.green,
-      ),
+  void _navigateToChat(UserModel otherUser) async {
+    final chatService = ChatService();
+    final currentUserId = Supabase.instance.client.auth.currentUser!.id;
+
+    // إظهار مؤشر تحميل
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => Center(child: CircularProgressIndicator()),
     );
+
+    try {
+      // جلب أو إنشاء محادثة
+      await chatService.getOrCreateChat(currentUserId, otherUser.id);
+
+      // إغلاق مؤشر التحميل
+      Navigator.pop(context);
+
+      // الانتقال لشاشة الشات
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => ChatScreen(
+            user: {
+              "uid": otherUser.id,
+              "fullname": otherUser.fullname,
+              "imageurl": otherUser.imageUrl,
+            },
+          ),
+        ),
+      );
+    } catch (e) {
+      // إغلاق مؤشر التحميل في حالة الخطأ
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to start chat: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   String _formatTime(DateTime time) {

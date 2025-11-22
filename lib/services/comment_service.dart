@@ -1,12 +1,12 @@
 import 'dart:async';
+import 'package:soso/model/PostModel.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../model/CommentModel.dart';
+import 'notification_service.dart';
+import 'PostService.dart';
 
 class CommentService {
   final SupabaseClient supabase = Supabase.instance.client;
-
-  // ⭐ خريطة لحفظ الـ Streams لكل بوست
-  final Map<int, StreamController<List<Comment>>> _streamControllers = {};
 
   /// ⭐ إضافة تعليق جديد
   Future<bool> addComment({
@@ -15,7 +15,11 @@ class CommentService {
     required String content,
     required String fullname,
     required String userimage,
+    required String postOwnerId, // ⭐ جديد: معرف صاحب البوست
+    required String postImage, // ⭐ جديد: صورة البوست
   }) async {
+    final postService = PostService();
+    final notificationService = NotificationService(); // ⭐ جديد
     try {
       await supabase.from('Comments').insert({
         'post_id': postId,
@@ -23,7 +27,24 @@ class CommentService {
         'contenttext': content,
         "fullname": fullname,
         "userimage": userimage,
+        "postOwnerId": postOwnerId,
+        "postImage": postImage,
       });
+
+      // ⭐ جديد: تحديث عدد التعليقات في البوست
+      await postService.updateCommentsCount(postId);
+
+      // ⭐ جديد: إرسال إشعار لصاحب البوست
+      await notificationService.addNotification(
+        type: 'comment',
+        senderId: userId,
+        receiverId: postOwnerId,
+        postId: postId.toString(),
+        senderName: fullname,
+        senderImage: userimage,
+        postImage: postImage,
+      );
+
       return true;
     } catch (e) {
       print("Error adding comment: $e");
@@ -31,43 +52,19 @@ class CommentService {
     }
   }
 
-  /// ⭐ جلب Stream للتعليقات - الطريقة المضمونة
+  /// ⭐ جلب Stream للتعليقات - الطريقة المحسّنة باستخدام Realtime
   Stream<List<Comment>> getCommentsStreamByPostId(int postId) {
-    // إذا فيه Stream مفتوح خلاص، نرجعه
-    if (_streamControllers.containsKey(postId) &&
-        !_streamControllers[postId]!.isClosed) {
-      return _streamControllers[postId]!.stream;
-    }
-
-    // نفتح Stream جديد
-    final controller = StreamController<List<Comment>>.broadcast();
-    _streamControllers[postId] = controller;
-
-    // دالة لتحديث البيانات
-    void updateComments() async {
-      try {
-        final comments = await _getCommentsFromDB(postId);
-        if (!controller.isClosed) {
-          controller.add(comments);
-        }
-      } catch (e) {
-        print('Error updating comments: $e');
-      }
-    }
-
-    // أول تحديث فوري
-    updateComments();
-
-    // ⭐ التحديث التلقائي كل 2 ثانية - بديل الـ Realtime
-    Timer.periodic(Duration(seconds: 2), (timer) {
-      if (controller.isClosed) {
-        timer.cancel();
-        return;
-      }
-      updateComments();
-    });
-
-    return controller.stream;
+    return supabase
+        .from('Comments')
+        .stream(primaryKey: ['id'])
+        .eq('post_id', postId)
+        .order('created_at', ascending: true)
+        .map((listOfMaps) {
+          // تحويل قائمة الـ Maps إلى قائمة من الـ Comment objects
+          return listOfMaps.map((commentMap) {
+            return Comment.fromMap(commentMap);
+          }).toList();
+        });
   }
 
   /// ⭐ جلب التعليقات من الداتابيز
@@ -86,7 +83,6 @@ class CommentService {
     }
   }
 
-  /// ⭐ جلب التعليقات بشكل عادي (بدون Stream)
   Future<List<Comment>> getCommentsByPostId(int postId) async {
     return await _getCommentsFromDB(postId);
   }
@@ -94,17 +90,13 @@ class CommentService {
   /// ⭐ حذف تعليق
   Future<bool> deleteComment(int commentId, int postId) async {
     try {
+      final postService = PostService();
       await supabase.from('Comments').delete().eq('id', commentId);
+      await postService.updateCommentsCount(postId); // تحديث عدد التعليقات
       return true;
     } catch (e) {
       print("Error deleting comment: $e");
       return false;
     }
-  }
-
-  /// ⭐ تنظيف الـ Streams
-  void disposeStream(int postId) {
-    _streamControllers[postId]?.close();
-    _streamControllers.remove(postId);
   }
 }

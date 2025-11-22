@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:overlay_support/overlay_support.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:soso/Cubit/cubitcreateuser.dart';
-import 'package:soso/Cubit/cubitsignInuser.dart';
-
 import 'package:soso/on_generate_Route.dart';
+import 'package:soso/controllers/notification_controller.dart';
 import 'package:soso/services/createUserfirebase.dart';
 import 'package:soso/services/signInUserfirebase.dart';
 import 'package:soso/views/pageLogin/LoginPage.dart';
@@ -35,39 +34,63 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiBlocProvider(
       providers: [
-        BlocProvider(
-          create: (context) => CreateUserFirebase(counterstateintial()),
-        ),
-        BlocProvider(
-          create: (context) => Signinuserfirebase(counterstateintial2()),
-        ),
+        BlocProvider(create: (context) => CreateUserCubit()),
+        BlocProvider(create: (context) => SignInCubit()),
       ],
       child: ValueListenableBuilder<Locale>(
         valueListenable: appLocale,
         builder: (context, locale, _) {
-          return MaterialApp(
-            debugShowCheckedModeBanner: false,
+          // ⭐ جديد: لف التطبيق بـ OverlaySupport.global()
+          return OverlaySupport.global(
+            child: MaterialApp(
+              debugShowCheckedModeBanner: false,
+              locale: appLocale.value,
+              supportedLocales: const [Locale('en', 'US'), Locale('ar', 'EG')],
+              localizationsDelegates: const [
+                GlobalMaterialLocalizations.delegate,
+                GlobalWidgetsLocalizations.delegate,
+                GlobalCupertinoLocalizations.delegate,
+              ],
+              localeResolutionCallback: (locale, supportedLocales) {
+                return appLocale.value;
+              },
 
-            locale: appLocale.value,
-
-            supportedLocales: const [Locale('en', 'US'), Locale('ar', 'EG')],
-
-            localizationsDelegates: const [
-              GlobalMaterialLocalizations.delegate,
-              GlobalWidgetsLocalizations.delegate,
-              GlobalCupertinoLocalizations.delegate,
-            ],
-
-            localeResolutionCallback: (locale, supportedLocales) {
-              return appLocale.value;
-            },
-
-            onGenerateRoute: onGenerateRoute,
-
-            initialRoute: LoginPage.routeName,
+              home: const AuthStateListener(),
+              onGenerateRoute: onGenerateRoute,
+            ),
           );
         },
       ),
     );
+  }
+}
+
+// ⭐ جديد: ويدجت جديد للاستماع لحالة تسجيل الدخول وتفعيل الإشعارات
+class AuthStateListener extends StatefulWidget {
+  const AuthStateListener({super.key});
+
+  @override
+  State<AuthStateListener> createState() => _AuthStateListenerState();
+}
+
+class _AuthStateListenerState extends State<AuthStateListener> {
+  @override
+  void initState() {
+    super.initState();
+    // الاستماع لتغيرات حالة المصادقة
+    Supabase.instance.client.auth.onAuthStateChange.listen((data) {
+      final AuthChangeEvent event = data.event;
+      if (event == AuthChangeEvent.signedIn) {
+        NotificationController().initialize();
+      } else if (event == AuthChangeEvent.signedOut) {
+        NotificationController().dispose();
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // يعرض شاشة الدخول مباشرة عند فتح التطبيق
+    return LoginPage();
   }
 }

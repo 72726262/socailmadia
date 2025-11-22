@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
-import 'package:soso/Cubit/cubitcreateuser.dart';
 import 'package:soso/main.dart';
 import 'package:soso/services/createUserfirebase.dart';
 import 'package:soso/views/pageLogin/EmailConfirmationScreen.dart';
@@ -61,34 +60,27 @@ class _Registerpage2State extends State<Registerpage2>
     gender = args["gender"];
     datetime = args["birthDate"];
     return Scaffold(
-      body: BlocConsumer<CreateUserFirebase, counterstate>(
+      body: BlocConsumer<CreateUserCubit, CreateUserState>(
         listener: (context, state) {
-          if (state is counterstateLoding) {
+          if (state is CreateUserLoading) {
             _isloding = true;
-          } else if (state is counterstateSuccuss) {
+            setState(() {});
+          } else if (state is CreateUserSuccess) {
             _isloding = false;
+            setState(() {});
             Navigator.pushNamed(context, EmailConfirmationScreen.routeName);
-          } else if (state is counterstateFaliuer) {
+          } else if (state is CreateUserFailure) {
             _isloding = false;
+            setState(() {});
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text(
-                  context.read<CreateUserFirebase>().error22.toString(),
-                  style: TextStyle(fontSize: 28),
-                ),
-              ),
-            );
-          } else {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  context.read<CreateUserFirebase>().error22.toString(),
-                ),
+                content: Text(state.message),
+                backgroundColor: Colors.red,
               ),
             );
           }
         },
-        builder: (context, asyncSnapshot) {
+        builder: (context, state) {
           return Stack(
             children: [
               FadeTransition(
@@ -303,7 +295,7 @@ class _Registerpage2State extends State<Registerpage2>
                               if (!_formKey.currentState!.validate()) return;
 
                               if (isEmailSelected) {
-                                context.read<CreateUserFirebase>().signUp(
+                                context.read<CreateUserCubit>().signUp(
                                   email: email!,
                                   password: password!,
                                   fullName: fullname.toString(),
